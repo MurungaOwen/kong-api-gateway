@@ -1,23 +1,103 @@
+# API billing demo around Kong (DB-less). See docs/ for the guided tour.
+x-jwt-secret: &jwt_secret ${JWT_SECRET:-dev-secret-change-me-please-32b!}
+
 services:
+  # One-shot: render kong.yml from the billing DB so Kong always boots with every consumer.
+  kong-config-init:
+    image: kong-billing/billing-service:dev   # same image as billing-service, built once
+    build: ./services/billing-service
+    command: ["python", "-m", "app.render", "/kong-config/kong.yml"]
+    environment:
+      DB_PATH: /data/billing.db
+      JWT_SECRET: *jwt_secret
+    volumes:
+      - ./data/kong:/kong-config
+      - ./data/billing:/data
+
   kong:
     image: kong:3.7
+    depends_on:
+      kong-config-init:
+        condition: service_completed_successfully
+      product-api:
+        condition: service_started
     environment:
       KONG_DATABASE: "off"
       KONG_DECLARATIVE_CONFIG: /kong/declarative/kong.yml
+      KONG_PLUGINS: bundled,billing-meter        # enable our custom Lua plugin
+      KONG_DNS_VALID_TTL: "5"                    # re-resolve `product-api` every 5s so scaling is noticed fast
+      KONG_STATUS_LISTEN: 0.0.0.0:8007           # /metrics + /status for Prometheus
+      KONG_ADMIN_LISTEN: 0.0.0.0:8001
       KONG_PROXY_ACCESS_LOG: /dev/stdout
       KONG_ADMIN_ACCESS_LOG: /dev/stdout
       KONG_PROXY_ERROR_LOG: /dev/stderr
       KONG_ADMIN_ERROR_LOG: /dev/stderr
-      KONG_ADMIN_LISTEN: 0.0.0.0:8001
     volumes:
-      - ./kong/kong.yml:/kong/declarative/kong.yml:ro
+      - ./data/kong:/kong/declarative:ro
+      - ./kong/plugins/billing-meter:/usr/local/share/lua/5.1/kong/plugins/billing-meter:ro
     ports:
-      - "8000:8000"   # proxy
-      - "8001:8001"   # admin API (local dev only)
-    depends_on:
-      - product-api
+      - "8000:8000"   # proxy: the only door customers and the dashboard use
+      - "8001:8001"   # Admin API: local dev only, never expose this in real life
 
+  # The billable API. Scale it to see Kong load balance: docker compose up -d --scale product-api=3
   product-api:
     build: ./services/product-api
-    expose:
-      - "8080"
+    expose: ["8080"]
+
+  # Owns consumers/plans/invoices. No published port: reachable only via Kong's JWT-protected /billing.
+  billing-service:
+    image: kong-billing/billing-service:dev
+    build: ./services/billing-service
+    depends_on: [kong-config-init]
+    environment:
+      DB_PATH: /data/billing.db
+      KONG_ADMIN_URL: http://kong:8001
+      KONG_CONFIG_PATH: /kong-config/kong.yml
+      USAGE_INGEST_URL: http://usage-ingest:8100
+      JWT_SECRET: *jwt_secret
+      AUTO_SYNC: "true"
+    volumes:
+      - ./data/kong:/kong-config
+      - ./data/billing:/data
+    expose: ["8090"]
+
+  # TypeScript: receives usage from Kong (http-log + billing-meter), persists it, serves queries.
+  usage-ingest:
+    build: ./services/usage-ingest
+    environment:
+      DATA_DIR: /data
+    volumes:
+      - ./data/usage:/data
+    ports:
+      - "8100:8100"   # published for curl-ing; Kong reaches it on the internal network
+
+  # TypeScript: the UI. Talks to billing THROUGH Kong with a JWT.
+  dashboard:
+    build: ./services/dashboard
+    depends_on: [kong, usage-ingest]
+    environment:
+      KONG_URL: http://kong:8000
+      INGEST_URL: http://usage-ingest:8100
+      JWT_SECRET: *jwt_secret
+      DASHBOARD_PASSWORD: ${DASHBOARD_PASSWORD:-}   # empty = no login (fine on localhost, not beyond)
+    ports:
+      - "3000:3000"
+
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"        # demo only: no login
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "3001:3000"
+    depends_on: [prometheus]
