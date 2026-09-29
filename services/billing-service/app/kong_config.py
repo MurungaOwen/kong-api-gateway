@@ -9,6 +9,15 @@ def render(consumers):
     rate-limiting-advanced), so the plan limit is attached per consumer."""
     return {
         "_format_version": "3.0",
+        "plugins": [
+            {
+                "name": "http-log",
+                "config": {
+                    "http_endpoint": "http://usage-ingest:8100/ingest",
+                    "queue": {"max_batch_size": 20, "max_coalescing_delay": 2},
+                },
+            }
+        ],
         "services": [
             {
                 "name": "product-api",

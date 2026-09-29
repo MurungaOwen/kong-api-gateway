@@ -21,4 +21,15 @@ Kong OSS lacks consumer-group rate limiting (Enterprise), so the plan's limit is
 attached as a per-consumer `rate-limiting` plugin. DB-less trade-off: config changes
 mean a full reload via `POST /config`.
 
+## Milestone 3: metering
+
+A global `http-log` plugin (batched via `queue`) ships every request log to the
+TypeScript `usage-ingest` service. Billable = identified consumer and status < 400
+(so 401/429/5xx are free). After some authenticated calls (batches flush within ~2s):
+
+    curl localhost:8100/usage                      # consumers with usage
+    curl 'localhost:8100/usage/acme?month=2026-09' # totals by route
+
+Usage is in-memory for now; durable storage arrives with invoicing.
+
 Roadmap: auth + tiers, metering (TS ingest), Lua plugin, invoices, observability.

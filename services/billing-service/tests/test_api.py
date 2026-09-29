@@ -17,3 +17,4 @@ def test_consumer_flow_and_render():
     acme = cfg["consumers"][0]
     assert acme["keyauth_credentials"][0]["key"] == key
     assert acme["plugins"][0]["config"]["minute"] == 1000
+    assert cfg["plugins"][0]["name"] == "http-log"
