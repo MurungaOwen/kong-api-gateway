@@ -21,3 +21,10 @@ services:
     build: ./services/product-api
     expose:
       - "8080"
+
+  billing-service:
+    build: ./services/billing-service
+    environment:
+      KONG_ADMIN_URL: http://kong:8001
+    ports:
+      - "8090:8090"   # direct for now; JWT-protected route via Kong comes in milestone 5
