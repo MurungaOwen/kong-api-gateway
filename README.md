@@ -10,6 +10,10 @@ created and edited in the UI. No code change, config edit or restart is needed.
 
 ![Dashboard overview](docs/img/dashboard-overview.png)
 
+<sub>The dashboard follows your OS theme. Dark mode:</sub>
+
+![Dashboard overview, dark theme](docs/img/dashboard-overview-dark.png)
+
 | | |
 |---|---|
 | **Gateway** | Kong 3.7 in **DB-less** mode (config is a generated YAML file), plus one **custom Lua plugin** |
@@ -230,7 +234,9 @@ Both run on every billable route so you can compare them (`GET :8100/compare/<su
 
 ## 4. Managing everything from the UI
 
-Open **http://localhost:3000**. Four tabs:
+Open **http://localhost:3000**. The console uses a Fluent-inspired layout: a **left navigation rail** with the four sections below,
+a top bar with breadcrumbs, a **page header with a command bar** (month picker, Refresh), and **toast message bars** that confirm each
+action or explain an error. It adapts to light/dark mode and collapses the rail into a scrolling strip on narrow screens.
 
 ### Overview: subscribers and their activity
 
@@ -519,6 +525,9 @@ the **generated Kong config** (plugin order, ACL allow-lists, limits, upstreams,
 JWT signing, the dashboard login, and the Lua event logic. CI (`.github/workflows/ci.yml`) runs the same plus `docker compose config`.
 
 Working on the UI: it is a single file, `services/dashboard/public/index.html`, with Vue 3 loaded from `unpkg.com`.
+The look is driven by a small set of design tokens at the top of its `<style>` block (colours, radii, shadows, with a dark-mode override),
+so restyling means editing those variables. The design is *inspired by* Microsoft's Fluent design language; it uses no Microsoft logos or assets, and the font
+stack starts with Segoe UI and falls back to system fonts (the screenshots above were captured on Linux, so they use the fallback).
 It is served by the dashboard container, so rebuild that image (`docker compose up -d --build dashboard`) after edits.
 
 Adding a new kind of thing to manage means: a table in `store.py`, a field group in `kong_config.py`, an endpoint in `main.py`, a proxy route in

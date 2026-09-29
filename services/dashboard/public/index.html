@@ -5,94 +5,209 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>API Billing Dashboard</title>
 <style>
+  /* Fluent-inspired design tokens (own implementation; no Microsoft assets). Light + dark. */
   :root {
-    --bg: #f6f7f9; --card: #fff; --ink: #1c2330; --muted: #667085; --line: #e4e7ec;
-    --accent: #2f6fed; --accent-soft: #dbe7ff; --ok: #16803c; --warn: #b54708; --bad: #b42318;
+    --font: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+    --bg: #f5f5f5; --card: #ffffff; --ink: #242424; --muted: #616161; --line: #e0e0e0; --line-strong: #d1d1d1;
+    --accent: #0f6cbd; --accent-hover: #115ea3; --accent-press: #0c3b5e; --accent-soft: #ebf3fc; --accent-line: #b4d6fa;
+    --ok: #107c10; --ok-bg: #f1faf1; --warn: #bc4b09; --warn-bg: #fff9f5; --bad: #b10e1c; --bad-bg: #fdf3f4;
+    --shadow: 0 0 2px rgba(0,0,0,.12), 0 1px 2px rgba(0,0,0,.14);
+    --shadow-pop: 0 0 8px rgba(0,0,0,.12), 0 8px 16px rgba(0,0,0,.14);
+    --r: 4px; --r-lg: 8px;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #10131a; --card: #181c25; --ink: #e6e9f0; --muted: #98a2b3; --line: #2a303c;
-      --accent: #6d9bff; --accent-soft: #24345c; --ok: #4ade80; --warn: #fbbf24; --bad: #f87171;
+      --bg: #1f1f1f; --card: #292929; --ink: #ffffff; --muted: #adadad; --line: #3d3d3d; --line-strong: #525252;
+      --accent: #479ef5; --accent-hover: #62abf5; --accent-press: #2886de; --accent-soft: #0f2a44; --accent-line: #1d4b78;
+      --ok: #54b054; --ok-bg: #0e2a0e; --warn: #f7630c; --warn-bg: #3a1d0d; --bad: #dc626d; --bad-bg: #3b1214;
+      --shadow: 0 0 2px rgba(0,0,0,.24), 0 1px 2px rgba(0,0,0,.28);
+      --shadow-pop: 0 0 8px rgba(0,0,0,.3), 0 8px 16px rgba(0,0,0,.36);
     }
   }
   [v-cloak] { display: none; }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 system-ui, sans-serif; }
-  header { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center; padding: 12px 24px; border-bottom: 1px solid var(--line); background: var(--card); }
-  h1 { font-size: 18px; margin: 0; }
-  h2 { font-size: 12px; margin: 0 0 8px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
-  h3 { font-size: 15px; margin: 0; }
-  main { padding: 20px 24px; max-width: 1280px; margin: 0 auto; }
-  .spacer { flex: 1; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/20px var(--font); }
+  h1, h2, h3 { margin: 0; font-weight: 600; }
+  h2 { font-size: 12px; line-height: 16px; margin: 0 0 8px; color: var(--muted); letter-spacing: .01em; }
+  h3 { font-size: 16px; line-height: 22px; }
   .muted { color: var(--muted); }
-  nav { display: flex; gap: 4px; }
-  nav button { border: 0; background: none; padding: 8px 14px; border-radius: 6px; font-weight: 600; color: var(--muted); }
-  nav button.on { background: var(--accent-soft); color: var(--accent); }
-  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 16px; }
-  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
-  .kpi b { display: block; font-size: 26px; font-variant-numeric: tabular-nums; }
-  .layout { display: grid; grid-template-columns: minmax(320px, 5fr) 7fr; gap: 16px; align-items: start; }
-  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .spacer { flex: 1; }
+  code { background: var(--bg); border: 1px solid var(--line); padding: 0 5px; border-radius: var(--r); font: 12px/18px ui-monospace, "Cascadia Code", Consolas, monospace; word-break: break-all; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+  /* ---- app shell: left navigation rail + content ---- */
+  .shell { display: grid; grid-template-columns: 252px minmax(0, 1fr); min-height: 100vh; }
+  .rail { position: sticky; top: 0; height: 100vh; background: var(--card); border-right: 1px solid var(--line); display: flex; flex-direction: column; padding: 12px 8px; }
+  .brand { display: flex; gap: 10px; align-items: center; padding: 6px 10px 16px; }
+  .brand .mark { width: 32px; height: 32px; border-radius: 8px; display: grid; place-items: center; color: #fff; background: linear-gradient(135deg, #0f6cbd, #2b88d8 55%, #4fb3f0); box-shadow: var(--shadow); }
+  .brand b { display: block; font-size: 14px; line-height: 18px; }
+  .brand span { font-size: 12px; color: var(--muted); }
+  .rail nav { display: flex; flex-direction: column; gap: 2px; }
+  .navitem { position: relative; display: flex; align-items: center; gap: 12px; height: 40px; padding: 0 12px; border: 0; border-radius: var(--r); background: none; color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+  .navitem { white-space: nowrap; flex: none; }
+  .navitem:hover { background: var(--bg); }
+  .navitem.on { background: var(--accent-soft); font-weight: 600; }
+  .navitem.on::before { content: ""; position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px; border-radius: 2px; background: var(--accent); }
+  .navitem.on .ic { color: var(--accent); }
+  .ic { width: 20px; height: 20px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+  .railfoot { margin-top: auto; padding: 10px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--line); }
+  .railfoot i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--ok); margin-right: 6px; }
+
+  .content { min-width: 0; }
+  .topbar { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 12px; height: 48px; padding: 0 24px; background: var(--card); border-bottom: 1px solid var(--line); }
+  .crumbs { color: var(--muted); }
+  .crumbs b { color: var(--ink); font-weight: 600; }
+  main { padding: 0 24px 32px; max-width: 1400px; margin: 0 auto; }
+  .pagehead { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: flex-end; padding: 24px 0 16px; }
+  .pagehead h1 { font-size: 28px; line-height: 36px; letter-spacing: -.01em; }
+  .pagehead p { margin: 2px 0 0; color: var(--muted); }
+  .cmdbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+  /* ---- surfaces ---- */
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 16px; box-shadow: var(--shadow); }
+  .stack > * + * { margin-top: 16px; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .kpi { display: flex; gap: 14px; align-items: center; }
+  .kpi .kic { width: 40px; height: 40px; border-radius: var(--r-lg); background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; flex: none; }
+  .kpi .muted { display: block; font-size: 12px; line-height: 16px; }
+  .kpi b { display: block; font-size: 26px; line-height: 32px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .layout { display: grid; grid-template-columns: minmax(340px, 5fr) 7fr; gap: 16px; align-items: start; }
+  @media (max-width: 1000px) { .layout { grid-template-columns: 1fr; } }
+  .hint { font-size: 12px; line-height: 16px; color: var(--muted); margin: 8px 0 0; }
+  .empty { padding: 28px; text-align: center; color: var(--muted); }
+
+  /* ---- data grid ---- */
   table { width: 100%; border-collapse: collapse; }
-  th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; vertical-align: middle; }
-  th { font-size: 12px; color: var(--muted); font-weight: 600; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; vertical-align: middle; }
+  th { font-size: 12px; font-weight: 600; color: var(--muted); background: var(--bg); white-space: nowrap; }
+  thead th:first-child { border-top-left-radius: var(--r); } thead th:last-child { border-top-right-radius: var(--r); }
+  tbody tr:last-child td { border-bottom: 0; }
   td.num, th.num { text-align: right; }
   tr.sub { cursor: pointer; }
-  tr.sub:hover, tr.sel { background: var(--accent-soft); }
-  .pill { display: inline-block; padding: 1px 8px; border-radius: 99px; font-size: 12px; background: var(--accent-soft); color: var(--accent); }
-  .pill.off { background: var(--line); color: var(--muted); }
-  .meter { height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; }
-  .meter > i { display: block; height: 100%; background: var(--accent); }
+  tr.sub:hover td { background: var(--bg); }
+  tr.sel td { background: var(--accent-soft) !important; }
+  tr.sel td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+  .who { display: flex; align-items: center; gap: 10px; border-bottom: 0; }
+  td.whotd { padding: 6px 10px; }
+
+  /* ---- persona avatar, badge, progress ---- */
+  .avatar { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; color: #fff; font-size: 11px; font-weight: 600; flex: none; }
+  .avatar.lg { width: 44px; height: 44px; font-size: 15px; }
+  .name { font-size: 20px; line-height: 28px; font-weight: 600; }
+  .pill { display: inline-block; padding: 0 8px; border-radius: 999px; font-size: 12px; line-height: 20px; font-weight: 600; background: var(--accent-soft); color: var(--accent); border: 1px solid var(--accent-line); }
+  .pill.off { background: var(--bg); color: var(--muted); border-color: var(--line); }
+  .meter { height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; }
+  .meter > i { display: block; height: 100%; background: var(--accent); border-radius: 2px; }
   .meter.hot > i { background: var(--warn); }
-  input, select, button { font: inherit; padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--card); color: var(--ink); }
-  input[type=checkbox] { padding: 0; }
-  button { cursor: pointer; }
-  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-  button.danger { color: var(--bad); border-color: var(--bad); }
-  button.small { padding: 2px 8px; font-size: 12px; }
-  button:disabled { opacity: .5; cursor: default; }
+  .s2xx { color: var(--ok); font-weight: 600; } .s4xx { color: var(--warn); font-weight: 600; } .s5xx { color: var(--bad); font-weight: 600; }
+
+  /* ---- buttons & inputs ---- */
+  input, select, textarea, button { font: inherit; color: var(--ink); }
+  input, select, textarea { height: 32px; padding: 0 10px; background: var(--card); border: 1px solid var(--line-strong); border-bottom-color: var(--muted); border-radius: var(--r); }
+  textarea { height: auto; padding: 6px 10px; }
+  input:hover, select:hover, textarea:hover { border-color: var(--muted); }
+  input:focus, select:focus, textarea:focus { outline: none; border-color: var(--line-strong); border-bottom: 2px solid var(--accent); padding-bottom: 0; }
+  input[type=checkbox] { height: 16px; width: 16px; accent-color: var(--accent); }
   input.n { width: 100px; text-align: right; }
-  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-  .stack > * + * { margin-top: 16px; }
-  code { background: var(--bg); padding: 1px 6px; border-radius: 4px; word-break: break-all; }
-  .s2xx { color: var(--ok); } .s4xx { color: var(--warn); } .s5xx { color: var(--bad); }
-  .err { background: var(--bad); color: #fff; padding: 8px 24px; cursor: pointer; }
-  .ok { background: var(--ok); color: #fff; padding: 8px 24px; }
+  button { height: 32px; padding: 0 12px; background: var(--card); border: 1px solid var(--line-strong); border-radius: var(--r); font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+  button:hover { background: var(--bg); border-color: var(--muted); }
+  button:active { background: var(--line); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  @media (prefers-color-scheme: dark) { button.primary { background: #115ea3; border-color: #115ea3; } button.primary:hover { background: #0f548c; } }
+  button.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+  button.primary:active { background: var(--accent-press); }
+  button.danger { color: var(--bad); border-color: var(--bad); background: transparent; }
+  button.danger:hover { background: var(--bad-bg); }
+  button.small { height: 24px; padding: 0 8px; font-size: 12px; }
+  button.subtle { border-color: transparent; background: transparent; }
+  button.subtle:hover { background: var(--bg); }
+  button:disabled { opacity: .45; cursor: default; pointer-events: none; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; }
+  .grid2 label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+  .grid2 input { width: 100%; text-align: left; }
+  .checks label { display: flex; gap: 8px; align-items: center; padding: 4px 0; }
+  fieldset { border: 1px solid var(--line); border-radius: var(--r-lg); margin: 12px 0 0; padding: 8px 12px 12px; }
+  legend { font-size: 12px; font-weight: 600; color: var(--muted); padding: 0 6px; }
+  .plans { display: grid; grid-template-columns: repeat(auto-fill, minmax(370px, 1fr)); gap: 16px; }
+
+  /* ---- message bars (toasts) ---- */
+  .toasts { position: fixed; top: 58px; right: 16px; z-index: 60; display: flex; flex-direction: column; gap: 8px; width: min(440px, calc(100vw - 32px)); }
+  .msg { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: var(--r-lg); border: 1px solid; box-shadow: var(--shadow-pop); background: var(--card); }
+  .msg.err { border-color: var(--bad); background: var(--bad-bg); }
+  .msg.err .ic { color: var(--bad); }
+  .msg.ok { border-color: var(--ok); background: var(--ok-bg); }
+  .msg.ok .ic { color: var(--ok); }
+  .msg span { flex: 1; word-break: break-word; }
   svg text { fill: var(--muted); font-size: 10px; }
   svg .bar { fill: var(--accent); }
-  .empty { padding: 24px; text-align: center; color: var(--muted); }
-  .plans { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 16px; }
-  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; }
-  .grid2 label { display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: var(--muted); }
-  .grid2 input { width: 100%; text-align: left; }
-  .checks label { display: flex; gap: 8px; align-items: center; padding: 3px 0; }
-  fieldset { border: 1px solid var(--line); border-radius: 8px; margin: 12px 0 0; padding: 8px 12px 10px; }
-  legend { font-size: 12px; color: var(--muted); padding: 0 4px; }
-  .hint { font-size: 12px; color: var(--muted); margin: 6px 0 0; }
+  svg .bar:hover { fill: var(--accent-hover); }
+  pre { margin: 0; }
+
+  /* ---- narrow screens: rail becomes a top strip ---- */
+  @media (max-width: 860px) {
+    .shell { grid-template-columns: 1fr; }
+    .rail { position: static; height: auto; flex-direction: row; align-items: center; padding: 6px 8px; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--line); }
+    .brand { padding: 0 8px; } .brand span, .railfoot { display: none; }
+    .rail nav { flex-direction: row; }
+    .navitem.on::before { left: 10px; right: 10px; top: auto; bottom: 0; width: auto; height: 3px; }
+    .topbar { display: none; } main { padding: 0 12px 24px; }
+    .card { overflow-x: auto; }
+  }
 </style>
 </head>
 <body>
 <div id="app" v-cloak>
-  <div class="err" v-if="error" @click="error = ''" title="click to dismiss">{{ error }}</div>
-  <div class="ok" v-if="notice">{{ notice }}</div>
-  <header>
-    <h1>API Billing Dashboard</h1>
-    <nav>
-      <button v-for="t in tabs" :key="t.id" :class="{ on: tab === t.id }" @click="go(t.id)">{{ t.label }}</button>
-    </nav>
+  <div class="toasts">
+    <div class="msg err" v-if="error" role="alert">
+      <svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5M12 16.5h.01"/></svg>
+      <span>{{ error }}</span><button class="small subtle" @click="error = ''" aria-label="Dismiss">✕</button>
+    </div>
+    <div class="msg ok" v-if="notice" role="status">
+      <svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.7 2.7L16 9.5"/></svg>
+      <span>{{ notice }}</span>
+    </div>
+  </div>
+
+  <div class="shell">
+    <aside class="rail">
+      <div class="brand">
+        <div class="mark"><svg class="ic" viewBox="0 0 24 24" style="stroke:#fff"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M12 12l8-4.5M12 12v9M12 12L4 7.5"/></svg></div>
+        <div><b>Billing Console</b><span>API gateway · Kong</span></div>
+      </div>
+      <nav aria-label="Sections">
+        <button v-for="t in tabs" :key="t.id" class="navitem" :class="{ on: tab === t.id }" @click="go(t.id)" :aria-current="tab === t.id ? 'page' : null">
+          <svg class="ic" viewBox="0 0 24 24"><path :d="t.icon"/></svg>{{ t.label }}
+        </button>
+      </nav>
+      <div class="railfoot"><i></i>Kong 3.7 · DB-less<br>{{ updated || 'connecting…' }}</div>
+    </aside>
+
+    <div class="content">
+  <div class="topbar">
+    <span class="crumbs">Console &nbsp;›&nbsp; <b>{{ page.title }}</b></span>
     <span class="spacer"></span>
-    <label v-if="tab === 'overview'">Month <input type="month" v-model="month" @change="loadOverview"></label>
-    <span class="muted">{{ updated }}</span>
-  </header>
+    <span class="muted">Administrator</span>
+    <span class="avatar" style="background:#0f6cbd">AD</span>
+  </div>
 
   <main>
+    <div class="pagehead">
+      <div><h1>{{ page.title }}</h1><p>{{ page.sub }}</p></div>
+      <span class="spacer"></span>
+      <div class="cmdbar">
+        <label v-if="tab === 'overview'" class="row muted">Month <input type="month" v-model="month" @change="loadOverview"></label>
+        <button @click="refreshAll"><svg class="ic" viewBox="0 0 24 24" style="width:16px;height:16px"><path d="M20 12a8 8 0 10-2.3 5.7M20 5v5h-5"/></svg>Refresh</button>
+      </div>
+    </div>
     <!-- ============================ OVERVIEW ============================ -->
     <template v-if="tab === 'overview'">
       <div class="kpis">
-        <div class="card kpi"><span class="muted">Subscribers</span><b>{{ fmt(totals.subscribers) }}</b></div>
-        <div class="card kpi"><span class="muted">API calls</span><b>{{ fmt(totals.calls) }}</b></div>
-        <div class="card kpi"><span class="muted">Billable units</span><b>{{ fmt(totals.units) }}</b></div>
-        <div class="card kpi"><span class="muted">Invoiced this month</span><b>{{ money(totals.revenue_cents) }}</b></div>
+        <div class="card kpi"><span class="kic"><svg class="ic" viewBox="0 0 24 24"><path d="M16 19v-1a4 4 0 00-4-4H7a4 4 0 00-4 4v1M9.5 10a3.5 3.5 0 100-7 3.5 3.5 0 000 7M21 19v-1a4 4 0 00-3-3.9M15.5 3.2a3.5 3.5 0 010 6.6"/></svg></span><div><span class="muted">Subscribers</span><b>{{ fmt(totals.subscribers) }}</b></div></div>
+        <div class="card kpi"><span class="kic"><svg class="ic" viewBox="0 0 24 24"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg></span><div><span class="muted">API calls</span><b>{{ fmt(totals.calls) }}</b></div></div>
+        <div class="card kpi"><span class="kic"><svg class="ic" viewBox="0 0 24 24"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M12 12l8-4.5M12 12v9M12 12L4 7.5"/></svg></span><div><span class="muted">Billable units</span><b>{{ fmt(totals.units) }}</b></div></div>
+        <div class="card kpi"><span class="kic"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6.5 12h.01M17.5 12h.01"/></svg></span><div><span class="muted">Invoiced this month</span><b>{{ money(totals.revenue_cents) }}</b></div></div>
       </div>
       <div class="layout">
         <div class="stack">
@@ -102,7 +217,7 @@
               <thead><tr><th>Name</th><th>Plan</th><th class="num">Units</th><th style="width:90px">Allowance</th><th class="num">Invoice</th></tr></thead>
               <tbody>
                 <tr v-for="r in rows" :key="r.name" class="sub" :class="{ sel: r.name === selected }" @click="select(r.name)">
-                  <td>{{ r.name }}</td>
+                  <td class="whotd"><div class="who"><span class="avatar" :style="avatarStyle(r.name)">{{ initials(r.name) }}</span>{{ r.name }}</div></td>
                   <td><span class="pill">{{ r.plan }}</span></td>
                   <td class="num">{{ fmt(r.units) }}</td>
                   <td><div class="meter" :class="{ hot: r.percent_used >= 80 }" :title="r.percent_used + '% of ' + fmt(r.included)"><i :style="{ width: Math.min(r.percent_used, 100) + '%' }"></i></div></td>
@@ -126,7 +241,8 @@
         <section class="card" v-if="detail">
           <div class="stack">
             <div class="row">
-              <h1>{{ detail.name }}</h1>
+              <span class="avatar lg" :style="avatarStyle(detail.name)">{{ initials(detail.name) }}</span>
+              <h3 class="name">{{ detail.name }}</h3>
               <select :value="detail.plan" @change="changePlan(detail.name, $event.target.value)">
                 <option v-for="p in plans" :key="p.name" :value="p.name">{{ p.name }}</option>
               </select>
@@ -336,6 +452,8 @@
       </section>
     </template>
   </main>
+    </div>
+  </div>
 </div>
 
 <script src="https://unpkg.com/vue@3.4.38/dist/vue.global.prod.js"></script>
@@ -356,7 +474,15 @@ if (!window.Vue) {
 
   createApp({
     setup() {
-      const tabs = [{ id: "overview", label: "Overview" }, { id: "plans", label: "Plans & limits" }, { id: "endpoints", label: "Endpoints" }, { id: "gateway", label: "Gateway" }];
+      const tabs = [
+        { id: "overview", label: "Overview", icon: "M3 3h8v8H3zM13 3h8v8h-8zM3 13h8v8H3zM13 13h8v8h-8z", title: "Overview", sub: "Usage, invoices and API keys for every subscriber" },
+        { id: "plans", label: "Plans & limits", icon: "M12 3l9 5-9 5-9-5 9-5zM3 13l9 5 9-5", title: "Plans & limits", sub: "Pricing, rate limits and endpoint access for each plan" },
+        { id: "endpoints", label: "Endpoints", icon: "M4 8h11M11 4l4 4-4 4M20 16H9M13 12l-4 4 4 4", title: "Endpoints", sub: "Every endpoint is its own route on the gateway, with its own price" },
+        { id: "gateway", label: "Gateway", icon: "M4 4h16v6H4zM4 14h16v6H4zM8 7h.01M8 17h.01", title: "Gateway", sub: "Backends, live health and the Kong configuration in use" },
+      ];
+      const AVATARS = ["#0f6cbd", "#8764b8", "#038387", "#c239b3", "#ca5010", "#498205", "#986f0b", "#5c2e91"];
+      const initials = (n) => (n.split(/[-_ ]+/).filter(Boolean).slice(0, 2).map((p) => p[0]).join("") || n.slice(0, 2)).toUpperCase();
+      const avatarStyle = (n) => ({ background: AVATARS[[...n].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % AVATARS.length] });
       const tab = ref(location.hash.slice(1) || "overview");
       const month = ref(new Date().toISOString().slice(0, 7));
       const error = ref(""), notice = ref(""), updated = ref(""), busy = ref(false), trafficMsg = ref("");
@@ -424,6 +550,11 @@ if (!window.Vue) {
       async function reloadCatalog() { await loadOverview(); resetDrafts(); }
 
       async function loadGateway() { const g = await api("GET", "/api/gateway"); gatewayYaml.value = g.yaml; health.value = g.health; }
+      const page = computed(() => tabs.find((t) => t.id === tab.value));
+      const refreshAll = () => guarded(async () => {
+        if (tab.value === "overview") await loadOverview();
+        else { await reloadCatalog(); if (tab.value === "gateway") await loadGateway(); }
+      });
       const go = (t) => { tab.value = t; location.hash = t; if (t !== "overview") guarded(async () => { await reloadCatalog(); if (t === "gateway") await loadGateway(); }); };
       const select = (name) => { selected.value = name; refresh(); };
 
@@ -509,7 +640,7 @@ if (!window.Vue) {
       onMounted(async () => { await guarded(reloadCatalog); timer = setInterval(() => { if (tab.value === "overview") refresh(); else if (tab.value === "gateway") guarded(loadGateway); }, 5000); });
       onUnmounted(() => clearInterval(timer));
 
-      return { upstreams, upDrafts, newUp, health, gatewayYaml, endpointsOn, loadGateway, createUpstream, saveUpstream, deleteUpstream, resync, tabs, tab, month, error, notice, updated, busy, trafficMsg, rows, totals, plans, endpoints, selected, detail, revealed, newSub, keyLabel, newPlanName, newEp,
+      return { page, refreshAll, initials, avatarStyle, upstreams, upDrafts, newUp, health, gatewayYaml, endpointsOn, loadGateway, createUpstream, saveUpstream, deleteUpstream, resync, tabs, tab, month, error, notice, updated, busy, trafficMsg, rows, totals, plans, endpoints, selected, detail, revealed, newSub, keyLabel, newPlanName, newEp,
         drafts, epDrafts, fmt, money, mask, statusClass, planOf, subscribersOn, plansWith, limitsText, isDirty, resetDraft, usedPct, routes, bars,
         loadOverview, go, select, createSubscriber, changePlan, deleteSubscriber, newKey, revokeKey, rotateKeys, copy, traffic, createPlan, savePlan, deletePlan,
         createEndpoint, saveEndpoint, deleteEndpoint };
