@@ -11,6 +11,29 @@ export interface UsageEvent {
   route: string;
   month: string; // YYYY-MM (UTC)
   status: number;
+  units: number; // billing weight; 1 for http-log
+}
+
+export type Source = "http-log" | "billing-meter";
+
+/** Event emitted by the Lua billing-meter plugin (already filtered to billable). */
+export interface MeterEvent {
+  consumer?: string;
+  route?: string;
+  units?: number;
+  status?: number;
+  ts?: number;
+}
+
+export function fromMeter(e: MeterEvent): UsageEvent | null {
+  if (!e.consumer) return null;
+  return {
+    consumer: e.consumer,
+    route: e.route ?? "unknown",
+    month: new Date(e.ts ?? Date.now()).toISOString().slice(0, 7),
+    status: e.status ?? 200,
+    units: Number.isFinite(e.units) && (e.units as number) > 0 ? (e.units as number) : 1,
+  };
 }
 
 /** Billable = identified consumer and non-error response (401/429/5xx are free). */
@@ -24,6 +47,7 @@ export function toEvent(e: KongLogEntry): UsageEvent | null {
     route: e.route?.name ?? "unknown",
     month: new Date(ts).toISOString().slice(0, 7),
     status,
+    units: 1,
   };
 }
 
@@ -41,7 +65,7 @@ export class UsageStore {
   record(ev: UsageEvent): void {
     const months = this.data.get(ev.consumer) ?? new Map();
     const routes = months.get(ev.month) ?? new Map();
-    routes.set(ev.route, (routes.get(ev.route) ?? 0) + 1);
+    routes.set(ev.route, (routes.get(ev.route) ?? 0) + ev.units);
     months.set(ev.month, routes);
     this.data.set(ev.consumer, months);
   }

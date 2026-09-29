@@ -8,9 +8,11 @@ services:
       KONG_ADMIN_ACCESS_LOG: /dev/stdout
       KONG_PROXY_ERROR_LOG: /dev/stderr
       KONG_ADMIN_ERROR_LOG: /dev/stderr
+      KONG_PLUGINS: bundled,billing-meter
       KONG_ADMIN_LISTEN: 0.0.0.0:8001
     volumes:
       - ./kong/kong.yml:/kong/declarative/kong.yml:ro
+      - ./kong/plugins/billing-meter:/usr/local/share/lua/5.1/kong/plugins/billing-meter:ro
     ports:
       - "8000:8000"   # proxy
       - "8001:8001"   # admin API (local dev only)

@@ -27,7 +27,13 @@ def render(consumers):
                         "name": "product-api-route",
                         "paths": ["/api"],
                         "strip_path": True,
-                        "plugins": [{"name": "key-auth", "config": {"key_names": ["apikey"]}}],
+                        "plugins": [
+                            {"name": "key-auth", "config": {"key_names": ["apikey"]}},
+                            {
+                                "name": "billing-meter",
+                                "config": {"ingest_url": "http://usage-ingest:8100/events", "units": 1},
+                            },
+                        ],
                     }
                 ],
             }

@@ -32,4 +32,21 @@ TypeScript `usage-ingest` service. Billable = identified consumer and status < 4
 
 Usage is in-memory for now; durable storage arrives with invoicing.
 
+## Milestone 4: custom Lua plugin
+
+`kong/plugins/billing-meter` (mounted into Kong, enabled via `KONG_PLUGINS`) runs in the
+`log` phase, builds a billing event (consumer, plan from the `plan:*` consumer tag,
+route, weighted `units`, latency) and ships it to `usage-ingest` `/events` from a
+zero-delay timer (the log phase forbids cosockets). Pure logic lives in `event.lua`:
+
+    lua5.1 kong/plugins/billing-meter/spec/event_spec.lua
+
+Compare both metering paths for a consumer:
+
+    curl localhost:8100/compare/acme
+
+Trade-off to observe: `http-log` is config-only and batched; the plugin can carry
+billing semantics (plan, units) but sends one request per call for now (a `kong.tools.queue`
+batch is the obvious next step) and is code you own and must keep compatible with Kong upgrades.
+
 Roadmap: auth + tiers, metering (TS ingest), Lua plugin, invoices, observability.
