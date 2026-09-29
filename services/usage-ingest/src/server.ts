@@ -1,10 +1,13 @@
 import { createServer } from "node:http";
-import { type Source, UsageStore, fromMeter, normalize, toEvent } from "./usage.js";
+import { openStore } from "./persistence.js";
+import { type Source, fromMeter, normalize, toEvent } from "./usage.js";
 
-const stores: Record<Source, UsageStore> = {
-  "http-log": new UsageStore(),
-  "billing-meter": new UsageStore(),
+const dataDir = process.env.DATA_DIR; // unset = in-memory only
+const stores = {
+  "http-log": openStore(dataDir && `${dataDir}/http-log.jsonl`),
+  "billing-meter": openStore(dataDir && `${dataDir}/billing-meter.jsonl`),
 };
+const DEFAULT_SOURCE: Source = "billing-meter"; // the plugin carries plan and weighted units
 const currentMonth = () => new Date().toISOString().slice(0, 7);
 
 function readBody(req: import("node:http").IncomingMessage): Promise<string> {
@@ -64,14 +67,25 @@ export const server = createServer(async (req, res) => {
       "billing-meter": stores["billing-meter"].summary(c, month),
     });
   }
-  const m = url.pathname.match(/^\/usage\/([^/]+)$/);
-  if (req.method === "GET" && m) {
-    const month = url.searchParams.get("month") ?? currentMonth();
-    const source = (url.searchParams.get("source") ?? "http-log") as Source;
-    if (!stores[source]) return json(res, 400, { error: "unknown source" });
-    return json(res, 200, stores[source].summary(decodeURIComponent(m[1]), month));
+  const source = (url.searchParams.get("source") ?? DEFAULT_SOURCE) as Source;
+  const month = url.searchParams.get("month") ?? currentMonth();
+  if (req.method === "GET" && url.pathname.startsWith("/usage") && !stores[source]) {
+    return json(res, 400, { error: "unknown source" });
   }
-  if (req.method === "GET" && url.pathname === "/usage") return json(res, 200, [...new Set(Object.values(stores).flatMap((x) => x.consumers()))].sort());
+  const m = url.pathname.match(/^\/usage\/([^/]+?)(?:\/(daily|recent))?$/);
+  if (req.method === "GET" && m) {
+    const consumer = decodeURIComponent(m[1]);
+    if (m[2] === "daily") return json(res, 200, stores[source].daily(consumer, month));
+    if (m[2] === "recent") {
+      const limit = Math.min(Number(url.searchParams.get("limit") ?? 25) || 25, 500);
+      return json(res, 200, stores[source].recent(consumer, limit));
+    }
+    return json(res, 200, stores[source].summary(consumer, month));
+  }
+  if (req.method === "GET" && url.pathname === "/overview") return json(res, 200, stores[source].overview(month));
+  if (req.method === "GET" && url.pathname === "/usage") {
+    return json(res, 200, [...new Set(Object.values(stores).flatMap((x) => x.consumers()))].sort());
+  }
   if (url.pathname === "/health") return json(res, 200, { status: "ok" });
   json(res, 404, { error: "not found" });
 });

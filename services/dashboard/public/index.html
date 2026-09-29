@@ -1,0 +1,521 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>API Billing Dashboard</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #fff; --ink: #1c2330; --muted: #667085; --line: #e4e7ec;
+    --accent: #2f6fed; --accent-soft: #dbe7ff; --ok: #16803c; --warn: #b54708; --bad: #b42318;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #10131a; --card: #181c25; --ink: #e6e9f0; --muted: #98a2b3; --line: #2a303c;
+      --accent: #6d9bff; --accent-soft: #24345c; --ok: #4ade80; --warn: #fbbf24; --bad: #f87171;
+    }
+  }
+  [v-cloak] { display: none; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 system-ui, sans-serif; }
+  header { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center; padding: 12px 24px; border-bottom: 1px solid var(--line); background: var(--card); }
+  h1 { font-size: 18px; margin: 0; }
+  h2 { font-size: 12px; margin: 0 0 8px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  h3 { font-size: 15px; margin: 0; }
+  main { padding: 20px 24px; max-width: 1280px; margin: 0 auto; }
+  .spacer { flex: 1; }
+  .muted { color: var(--muted); }
+  nav { display: flex; gap: 4px; }
+  nav button { border: 0; background: none; padding: 8px 14px; border-radius: 6px; font-weight: 600; color: var(--muted); }
+  nav button.on { background: var(--accent-soft); color: var(--accent); }
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+  .kpi b { display: block; font-size: 26px; font-variant-numeric: tabular-nums; }
+  .layout { display: grid; grid-template-columns: minmax(320px, 5fr) 7fr; gap: 16px; align-items: start; }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; vertical-align: middle; }
+  th { font-size: 12px; color: var(--muted); font-weight: 600; }
+  td.num, th.num { text-align: right; }
+  tr.sub { cursor: pointer; }
+  tr.sub:hover, tr.sel { background: var(--accent-soft); }
+  .pill { display: inline-block; padding: 1px 8px; border-radius: 99px; font-size: 12px; background: var(--accent-soft); color: var(--accent); }
+  .pill.off { background: var(--line); color: var(--muted); }
+  .meter { height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; }
+  .meter > i { display: block; height: 100%; background: var(--accent); }
+  .meter.hot > i { background: var(--warn); }
+  input, select, button { font: inherit; padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--card); color: var(--ink); }
+  input[type=checkbox] { padding: 0; }
+  button { cursor: pointer; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.danger { color: var(--bad); border-color: var(--bad); }
+  button.small { padding: 2px 8px; font-size: 12px; }
+  button:disabled { opacity: .5; cursor: default; }
+  input.n { width: 100px; text-align: right; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .stack > * + * { margin-top: 16px; }
+  code { background: var(--bg); padding: 1px 6px; border-radius: 4px; word-break: break-all; }
+  .s2xx { color: var(--ok); } .s4xx { color: var(--warn); } .s5xx { color: var(--bad); }
+  .err { background: var(--bad); color: #fff; padding: 8px 24px; cursor: pointer; }
+  .ok { background: var(--ok); color: #fff; padding: 8px 24px; }
+  svg text { fill: var(--muted); font-size: 10px; }
+  svg .bar { fill: var(--accent); }
+  .empty { padding: 24px; text-align: center; color: var(--muted); }
+  .plans { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 16px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; }
+  .grid2 label { display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: var(--muted); }
+  .grid2 input { width: 100%; text-align: left; }
+  .checks label { display: flex; gap: 8px; align-items: center; padding: 3px 0; }
+  fieldset { border: 1px solid var(--line); border-radius: 8px; margin: 12px 0 0; padding: 8px 12px 10px; }
+  legend { font-size: 12px; color: var(--muted); padding: 0 4px; }
+  .hint { font-size: 12px; color: var(--muted); margin: 6px 0 0; }
+</style>
+</head>
+<body>
+<div id="app" v-cloak>
+  <div class="err" v-if="error" @click="error = ''" title="click to dismiss">{{ error }}</div>
+  <div class="ok" v-if="notice">{{ notice }}</div>
+  <header>
+    <h1>API Billing Dashboard</h1>
+    <nav>
+      <button v-for="t in tabs" :key="t.id" :class="{ on: tab === t.id }" @click="go(t.id)">{{ t.label }}</button>
+    </nav>
+    <span class="spacer"></span>
+    <label v-if="tab === 'overview'">Month <input type="month" v-model="month" @change="loadOverview"></label>
+    <span class="muted">{{ updated }}</span>
+  </header>
+
+  <main>
+    <!-- ============================ OVERVIEW ============================ -->
+    <template v-if="tab === 'overview'">
+      <div class="kpis">
+        <div class="card kpi"><span class="muted">Subscribers</span><b>{{ fmt(totals.subscribers) }}</b></div>
+        <div class="card kpi"><span class="muted">API calls</span><b>{{ fmt(totals.calls) }}</b></div>
+        <div class="card kpi"><span class="muted">Billable units</span><b>{{ fmt(totals.units) }}</b></div>
+        <div class="card kpi"><span class="muted">Invoiced this month</span><b>{{ money(totals.revenue_cents) }}</b></div>
+      </div>
+      <div class="layout">
+        <div class="stack">
+          <section class="card">
+            <h2>Subscribers</h2>
+            <table>
+              <thead><tr><th>Name</th><th>Plan</th><th class="num">Units</th><th style="width:90px">Allowance</th><th class="num">Invoice</th></tr></thead>
+              <tbody>
+                <tr v-for="r in rows" :key="r.name" class="sub" :class="{ sel: r.name === selected }" @click="select(r.name)">
+                  <td>{{ r.name }}</td>
+                  <td><span class="pill">{{ r.plan }}</span></td>
+                  <td class="num">{{ fmt(r.units) }}</td>
+                  <td><div class="meter" :class="{ hot: r.percent_used >= 80 }" :title="r.percent_used + '% of ' + fmt(r.included)"><i :style="{ width: Math.min(r.percent_used, 100) + '%' }"></i></div></td>
+                  <td class="num">{{ money(r.invoice_cents) }}</td>
+                </tr>
+              </tbody>
+            </table>
+            <div class="empty" v-if="!rows.length">No subscribers yet. Create one below.</div>
+          </section>
+          <section class="card">
+            <h2>New subscriber</h2>
+            <form class="row" @submit.prevent="createSubscriber">
+              <input v-model.trim="newSub.name" placeholder="name (letters, digits, - _)" pattern="[a-zA-Z0-9_\-]{1,40}" required>
+              <select v-model="newSub.plan"><option v-for="p in plans" :key="p.name" :value="p.name">{{ p.name }} ({{ limitsText(p) }})</option></select>
+              <button class="primary">Create</button>
+            </form>
+            <p class="hint">Creates the subscriber, generates their first API key and reloads Kong.</p>
+          </section>
+        </div>
+
+        <section class="card" v-if="detail">
+          <div class="stack">
+            <div class="row">
+              <h1>{{ detail.name }}</h1>
+              <select :value="detail.plan" @change="changePlan(detail.name, $event.target.value)">
+                <option v-for="p in plans" :key="p.name" :value="p.name">{{ p.name }}</option>
+              </select>
+              <span class="spacer"></span>
+              <button class="danger" @click="deleteSubscriber(detail.name)">Delete subscriber</button>
+            </div>
+            <div class="muted">Plan limits: {{ limitsText(planOf(detail.plan)) }} · access: {{ (planOf(detail.plan)?.endpoints || []).join(', ') || 'none' }}</div>
+
+            <div>
+              <h2>API keys</h2>
+              <table v-if="detail.keys.length"><tbody>
+                <tr v-for="k in detail.keys" :key="k.id">
+                  <td>{{ k.label }}</td>
+                  <td><code>{{ revealed[k.id] ? k.api_key : mask(k.api_key) }}</code></td>
+                  <td class="muted">{{ k.created_at.slice(0, 10) }}</td>
+                  <td class="num">
+                    <button class="small" @click="revealed[k.id] = !revealed[k.id]">{{ revealed[k.id] ? 'Hide' : 'Show' }}</button>
+                    <button class="small" @click="copy(k.api_key)">Copy</button>
+                    <button class="small danger" @click="revokeKey(detail.name, k)">Revoke</button>
+                  </td>
+                </tr>
+              </tbody></table>
+              <div class="muted" v-else>No active keys: this subscriber cannot call the API.</div>
+              <form class="row" style="margin-top:8px" @submit.prevent="newKey(detail.name)">
+                <input v-model.trim="keyLabel" placeholder="label (e.g. prod, ci)" style="width:170px">
+                <button>Generate key</button>
+                <button type="button" v-if="detail.keys.length" @click="rotateKeys(detail)">Rotate all</button>
+              </form>
+            </div>
+
+            <div>
+              <h2>Send test traffic (as this subscriber, through Kong)</h2>
+              <div class="row">
+                <template v-for="e in endpoints" :key="e.name">
+                  <button @click="traffic(detail.name, e.path, 3)" :disabled="busy">3 × {{ e.path }} ({{ e.units }}u)</button>
+                </template>
+                <button @click="traffic(detail.name, '/api/quote', 30)" :disabled="busy">30 × /api/quote (hit the limit?)</button>
+                <span class="muted">{{ trafficMsg }}</span>
+              </div>
+              <p class="hint">200 = billed · 403 = endpoint not in the plan · 429 = rate limited (neither is billed).</p>
+            </div>
+
+            <div>
+              <h2>Usage: {{ fmt(detail.invoice.usage.units) }} of {{ fmt(detail.invoice.usage.included) }} included units ({{ detail.invoice.usage.calls }} calls)</h2>
+              <div class="meter" :class="{ hot: usedPct >= 80 }"><i :style="{ width: usedPct + '%' }"></i></div>
+            </div>
+
+            <div>
+              <h2>Units per day</h2>
+              <svg :viewBox="'0 0 560 136'" width="100%" role="img" aria-label="Billable units per day">
+                <g v-for="(b, i) in bars" :key="i">
+                  <rect class="bar" :x="b.x" :y="b.y" :width="b.w" :height="b.h" rx="2"><title>{{ b.label }}</title></rect>
+                  <text v-if="b.tick" :x="b.x + b.w / 2" y="132" text-anchor="middle">{{ i + 1 }}</text>
+                </g>
+              </svg>
+            </div>
+
+            <div>
+              <h2>By route</h2>
+              <table v-if="routes.length"><tr v-for="[r, n] in routes" :key="r"><td>{{ r }}</td><td class="num">{{ fmt(n) }}</td></tr></table>
+              <div class="muted" v-else>No usage yet.</div>
+            </div>
+
+            <div>
+              <h2>Invoice {{ detail.month }}</h2>
+              <table>
+                <tr v-for="l in detail.invoice.lines" :key="l.description"><td>{{ l.description }}</td><td class="num">{{ money(l.cents) }}</td></tr>
+                <tr><td><b>Total</b></td><td class="num"><b>{{ money(detail.invoice.total_cents) }}</b></td></tr>
+              </table>
+            </div>
+
+            <div>
+              <h2>Recent activity</h2>
+              <table v-if="detail.recent.length">
+                <thead><tr><th>Time</th><th>Route</th><th class="num">Units</th><th class="num">Status</th></tr></thead>
+                <tbody><tr v-for="(e, i) in detail.recent" :key="i">
+                  <td>{{ new Date(e.ts).toLocaleString() }}</td><td>{{ e.route }}</td><td class="num">{{ e.units }}</td>
+                  <td class="num" :class="statusClass(e.status)">{{ e.status }}</td>
+                </tr></tbody>
+              </table>
+              <div class="muted" v-else>No activity yet.</div>
+            </div>
+          </div>
+        </section>
+        <section class="card" v-else><div class="empty">Select a subscriber to see their activity.</div></section>
+      </div>
+    </template>
+
+    <!-- ============================== PLANS ============================= -->
+    <template v-if="tab === 'plans'">
+      <div class="row" style="margin-bottom:16px">
+        <form class="row" @submit.prevent="createPlan">
+          <input v-model.trim="newPlanName" placeholder="new plan name" pattern="[a-zA-Z0-9_\-]{1,40}" required>
+          <button class="primary">Add plan</button>
+        </form>
+        <span class="muted">A plan = price + included units + rate limits + which endpoints it can call. Saving reloads Kong.</span>
+      </div>
+      <div class="plans">
+        <section class="card" v-for="d in drafts" :key="d.name">
+          <div class="row"><h3>{{ d.name }}</h3><span class="muted">{{ subscribersOn(d.name) }} subscriber(s)</span><span class="spacer"></span><span class="pill off" v-if="isDirty(d)">unsaved changes</span></div>
+          <fieldset>
+            <legend>Billing</legend>
+            <div class="grid2">
+              <label>Monthly price ($)<input type="number" min="0" step="0.01" v-model.number="d.price"></label>
+              <label>Included units<input type="number" min="0" v-model.number="d.included"></label>
+              <label>Overage ($ per 1000 units)<input type="number" min="0" step="0.01" v-model.number="d.overage"></label>
+            </div>
+          </fieldset>
+          <fieldset>
+            <legend>Rate limits per subscriber (empty = unlimited)</legend>
+            <div class="grid2">
+              <label>Per second<input type="number" min="0" v-model.number="d.per_second" placeholder="unlimited"></label>
+              <label>Per minute<input type="number" min="0" v-model.number="d.per_minute" placeholder="unlimited"></label>
+              <label>Per hour<input type="number" min="0" v-model.number="d.per_hour" placeholder="unlimited"></label>
+              <label>Per day<input type="number" min="0" v-model.number="d.per_day" placeholder="unlimited"></label>
+            </div>
+            <p class="hint">Enforced by Kong's <code>rate-limiting</code> plugin; a call over any window gets HTTP 429 and is not billed.</p>
+          </fieldset>
+          <fieldset class="checks">
+            <legend>Endpoints this plan can call</legend>
+            <label v-for="e in endpoints" :key="e.name"><input type="checkbox" :value="e.name" v-model="d.endpoints"> <code>{{ e.path }}</code> <span class="muted">{{ e.units }} unit{{ e.units === 1 ? '' : 's' }}/call</span></label>
+            <div class="muted" v-if="!endpoints.length">No endpoints defined yet. Add some on the Endpoints tab.</div>
+            <p class="hint">Not ticked = Kong answers 403 for this plan's subscribers (ACL plugin).</p>
+          </fieldset>
+          <div class="row" style="margin-top:12px">
+            <button class="primary" :disabled="!isDirty(d)" @click="savePlan(d)">Save</button>
+            <button :disabled="!isDirty(d)" @click="resetDraft(d.name)">Discard</button>
+            <span class="spacer"></span>
+            <button class="danger" @click="deletePlan(d.name)">Delete</button>
+          </div>
+        </section>
+      </div>
+    </template>
+
+    <!-- ============================ ENDPOINTS =========================== -->
+    <template v-if="tab === 'endpoints'">
+      <section class="card">
+        <h2>Endpoint catalog: each row is its own Kong route</h2>
+        <div style="overflow-x:auto">
+        <table>
+          <thead><tr><th>Name</th><th>Public path</th><th class="num">Units per call</th><th>Backend</th><th>Backend path</th><th>Description</th><th>Plans with access</th><th></th></tr></thead>
+          <tbody>
+            <tr v-for="e in epDrafts" :key="e.name">
+              <td><code>{{ e.name }}</code></td>
+              <td><input v-model.trim="e.path" style="width:170px"></td>
+              <td class="num"><input class="n" type="number" min="1" v-model.number="e.units"></td>
+              <td><select v-model="e.upstream"><option v-for="u in upstreams" :key="u.name" :value="u.name">{{ u.name }}</option></select></td>
+              <td><input v-model.trim="e.upstream_path" :placeholder="e.path.replace('/api', '') || '/'" style="width:130px"></td>
+              <td><input v-model="e.description" style="width:100%; min-width:160px"></td>
+              <td><span class="pill" v-for="p in plansWith(e.name)" :key="p" style="margin-right:4px">{{ p }}</span><span class="muted" v-if="!plansWith(e.name).length">none (locked)</span></td>
+              <td class="num"><button class="small primary" @click="saveEndpoint(e)">Save</button> <button class="small danger" @click="deleteEndpoint(e.name)">Delete</button></td>
+            </tr>
+          </tbody>
+        </table>
+        </div>
+        <form class="row" style="margin-top:14px" @submit.prevent="createEndpoint">
+          <input v-model.trim="newEp.name" placeholder="name" pattern="[a-zA-Z0-9_\-]{1,40}" required style="width:120px">
+          <input v-model.trim="newEp.path" placeholder="/api/translate" pattern="/api/[a-zA-Z0-9_/\-]{1,80}" required style="width:170px">
+          <input class="n" type="number" min="1" v-model.number="newEp.units" title="units per call">
+          <select v-model="newEp.upstream" title="backend"><option v-for="u in upstreams" :key="u.name" :value="u.name">{{ u.name }}</option></select>
+          <input v-model.trim="newEp.upstream_path" placeholder="backend path (optional)" style="width:170px">
+          <input v-model="newEp.description" placeholder="description" style="width:240px">
+          <button class="primary">Add endpoint</button>
+        </form>
+        <p class="hint">Paths live under <code>/api/</code>; Kong strips that prefix, so <code>/api/report</code> reaches the upstream's <code>/report</code>. Leave <em>backend path</em> empty to use the public path minus <code>/api</code>. A new endpoint is locked until you tick it on a plan. Units are what gets billed per successful call.</p>
+      </section>
+    </template>
+
+    <!-- ============================ GATEWAY ============================= -->
+    <template v-if="tab === 'gateway'">
+      <section class="card" style="margin-bottom:16px">
+        <h2>Backends (Kong upstreams): where the endpoints' traffic goes</h2>
+        <div style="overflow-x:auto">
+        <table>
+          <thead><tr><th>Name</th><th>Targets (host:port, one per line)</th><th>Balancing</th><th>Health check path</th><th class="num">Every (s)</th><th>Live health</th><th></th></tr></thead>
+          <tbody>
+            <tr v-for="u in upDrafts" :key="u.name">
+              <td><code>{{ u.name }}</code><div class="muted">{{ endpointsOn(u.name) }} endpoint(s)</div></td>
+              <td><textarea v-model="u.targetsText" rows="2" style="width:190px; font: inherit"></textarea></td>
+              <td><select v-model="u.algorithm"><option>round-robin</option><option>least-connections</option></select></td>
+              <td><input v-model.trim="u.health_path" style="width:110px"></td>
+              <td class="num"><input class="n" style="width:64px" type="number" min="1" v-model.number="u.health_interval"></td>
+              <td>
+                <template v-if="health && health[u.name]">
+                  <div v-for="t in health[u.name]" :key="t.target"><span class="pill" :class="{ off: t.health !== 'HEALTHY' }">{{ t.health }}</span> {{ t.target }}
+                    <span class="muted" v-if="t.address.length > 1">({{ t.address.length }} replicas)</span></div>
+                </template>
+                <span class="muted" v-else>unknown</span>
+              </td>
+              <td class="num"><button class="small primary" @click="saveUpstream(u)">Save</button> <button class="small danger" @click="deleteUpstream(u.name)">Delete</button></td>
+            </tr>
+          </tbody>
+        </table>
+        </div>
+        <form class="row" style="margin-top:14px; align-items:flex-start" @submit.prevent="createUpstream">
+          <input v-model.trim="newUp.name" placeholder="backend name" pattern="[a-zA-Z0-9_\-]{1,40}" required style="width:140px">
+          <textarea v-model="newUp.targetsText" rows="2" placeholder="host:port (one per line)" required style="width:220px; font: inherit"></textarea>
+          <button class="primary">Add backend</button>
+        </form>
+        <p class="hint">A target may be a DNS name that resolves to many addresses (Docker Compose: <code>--scale product-api=3</code>), and Kong balances across them. Kong probes the health path actively and also ejects targets that return 5xx (passive checks).</p>
+      </section>
+      <section class="card">
+        <div class="row"><h2 style="margin:0">Kong config generated from everything you set here</h2><span class="spacer"></span>
+          <button @click="loadGateway">Refresh</button> <button class="primary" @click="resync">Re-sync Kong</button></div>
+        <p class="hint">Kong runs DB-less: this YAML <em>is</em> its whole configuration. Every change in this dashboard regenerates it and hot-reloads Kong. The file is also written to <code>data/kong/kong.yml</code> so Kong boots with it after a restart.</p>
+        <pre style="max-height:520px; overflow:auto; background:var(--bg); padding:12px; border-radius:8px; font-size:12px">{{ gatewayYaml }}</pre>
+      </section>
+    </template>
+  </main>
+</div>
+
+<script src="https://unpkg.com/vue@3.4.38/dist/vue.global.prod.js"></script>
+<script>
+if (!window.Vue) {
+  document.getElementById("app").removeAttribute("v-cloak");
+  document.getElementById("app").textContent = "Could not load Vue from the CDN (unpkg.com). Check your network and reload.";
+} else {
+  const { createApp, ref, reactive, computed, onMounted, onUnmounted } = Vue;
+
+  async function api(method, path, body) {
+    const res = await fetch(path, { method, headers: body ? { "content-type": "application/json" } : {}, body: body ? JSON.stringify(body) : undefined });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || res.statusText);
+    return data;
+  }
+  const blankToNull = (v) => (v === "" || v === undefined || v === 0 ? null : v);
+
+  createApp({
+    setup() {
+      const tabs = [{ id: "overview", label: "Overview" }, { id: "plans", label: "Plans & limits" }, { id: "endpoints", label: "Endpoints" }, { id: "gateway", label: "Gateway" }];
+      const tab = ref(location.hash.slice(1) || "overview");
+      const month = ref(new Date().toISOString().slice(0, 7));
+      const error = ref(""), notice = ref(""), updated = ref(""), busy = ref(false), trafficMsg = ref("");
+      const rows = ref([]), totals = reactive({ subscribers: 0, calls: 0, units: 0, revenue_cents: 0 });
+      const plans = ref([]), endpoints = ref([]), upstreams = ref([]);
+      const upDrafts = ref([]), newUp = reactive({ name: "", targetsText: "" }), health = ref(null), gatewayYaml = ref("");
+      const selected = ref(null), detail = ref(null);
+      const revealed = reactive({});
+      const newSub = reactive({ name: "", plan: "free" });
+      const keyLabel = ref(""), newPlanName = ref("");
+      const newEp = reactive({ name: "", path: "/api/", units: 1, description: "", upstream: "product-api", upstream_path: "" });
+      const drafts = ref([]), epDrafts = ref([]);
+
+      const fmt = (n) => Number(n).toLocaleString();
+      const money = (c) => "$" + (c / 100).toFixed(2);
+      const mask = (k) => k.slice(0, 4) + "…" + k.slice(-4);
+      const statusClass = (s) => (s >= 500 ? "s5xx" : s >= 400 ? "s4xx" : "s2xx");
+      const planOf = (n) => plans.value.find((p) => p.name === n);
+      const subscribersOn = (n) => rows.value.filter((r) => r.plan === n).length;
+      const plansWith = (ep) => plans.value.filter((p) => p.endpoints.includes(ep)).map((p) => p.name);
+      const limitsText = (p) => {
+        if (!p) return "";
+        const parts = [["per_second", "s"], ["per_minute", "min"], ["per_hour", "h"], ["per_day", "day"]].filter(([k]) => p[k]).map(([k, u]) => `${p[k]}/${u}`);
+        return parts.join(" · ") || "unlimited";
+      };
+
+      const fail = (e) => { error.value = String(e.message || e); };
+      const ok = (msg) => { notice.value = msg; setTimeout(() => (notice.value = ""), 2500); };
+      async function guarded(fn) { try { await fn(); } catch (e) { fail(e); } }
+
+      // ---- drafts: editable copies of plans/endpoints that the 5s poll never overwrites ----
+      const toDraft = (p) => ({ name: p.name, price: p.monthly_price_cents / 100, included: p.monthly_included, overage: p.overage_per_1k_cents / 100,
+        per_second: p.per_second, per_minute: p.per_minute, per_hour: p.per_hour, per_day: p.per_day, endpoints: [...p.endpoints] });
+      const draftKey = (d) => JSON.stringify([d.price, d.included, d.overage, d.per_second || null, d.per_minute || null, d.per_hour || null, d.per_day || null, [...d.endpoints].sort()]);
+      const isDirty = (d) => { const p = planOf(d.name); return !p || draftKey(d) !== draftKey(toDraft(p)); };
+      const resetDraft = (name) => { const i = drafts.value.findIndex((d) => d.name === name); if (i >= 0) drafts.value[i] = toDraft(planOf(name)); };
+      const resetDrafts = () => {
+        drafts.value = plans.value.map(toDraft); epDrafts.value = endpoints.value.map((e) => ({ ...e }));
+        upDrafts.value = upstreams.value.map((u) => ({ ...u, targetsText: u.targets.join("\n") }));
+      };
+      const endpointsOn = (up) => endpoints.value.filter((e) => e.upstream === up).length;
+      const targetsOf = (text) => text.split(/[\s,]+/).filter(Boolean);
+
+      const usedPct = computed(() => { const u = detail.value?.invoice.usage; return u && u.included ? Math.min((u.units / u.included) * 100, 100) : 0; });
+      const routes = computed(() => Object.entries(detail.value?.invoice.usage.by_route || {}).sort((a, b) => b[1] - a[1]));
+      const bars = computed(() => {
+        if (!detail.value) return [];
+        const [y, m] = detail.value.month.split("-").map(Number);
+        const days = new Date(y, m, 0).getDate(), byDay = Object.fromEntries(detail.value.daily.map((d) => [d.day, d]));
+        const vals = Array.from({ length: days }, (_, i) => byDay[`${detail.value.month}-${String(i + 1).padStart(2, "0")}`]?.units ?? 0);
+        const max = Math.max(...vals, 1), bw = 560 / days, H = 120;
+        return vals.map((v, i) => { const h = (v / max) * H; return { x: i * bw + 1, w: Math.max(bw - 2, 1), y: H - h, h: v ? Math.max(h, 1) : 0, tick: i === 0 || (i + 1) % 5 === 0, label: `${detail.value.month}-${String(i + 1).padStart(2, "0")}: ${fmt(v)} units` }; });
+      });
+
+      async function loadOverview() {
+        const o = await api("GET", `/api/overview?month=${month.value}`);
+        rows.value = o.rows; Object.assign(totals, o.totals); plans.value = o.plans; endpoints.value = o.endpoints; upstreams.value = o.upstreams;
+        if (!upstreams.value.some((u) => u.name === newEp.upstream)) newEp.upstream = upstreams.value[0]?.name ?? "";
+        if (!plans.value.some((p) => p.name === newSub.plan)) newSub.plan = plans.value[0]?.name ?? "";
+        if (!drafts.value.length && !epDrafts.value.length) resetDrafts();
+        if (selected.value) detail.value = await api("GET", `/api/subscribers/${encodeURIComponent(selected.value)}?month=${month.value}`);
+        updated.value = "updated " + new Date().toLocaleTimeString();
+      }
+      const refresh = () => guarded(loadOverview);
+      async function reloadCatalog() { await loadOverview(); resetDrafts(); }
+
+      async function loadGateway() { const g = await api("GET", "/api/gateway"); gatewayYaml.value = g.yaml; health.value = g.health; }
+      const go = (t) => { tab.value = t; location.hash = t; if (t !== "overview") guarded(async () => { await reloadCatalog(); if (t === "gateway") await loadGateway(); }); };
+      const select = (name) => { selected.value = name; refresh(); };
+
+      // ---- subscribers & keys ----
+      const createSubscriber = () => guarded(async () => {
+        const c = await api("POST", "/api/subscribers", { name: newSub.name, plan: newSub.plan });
+        newSub.name = ""; selected.value = c.name; ok(`Created ${c.name}; Kong reloaded with their key.`); await loadOverview();
+      });
+      const changePlan = (name, plan) => guarded(async () => { await api("PUT", `/api/subscribers/${encodeURIComponent(name)}/plan`, { plan }); ok(`${name} is now on ${plan}`); await loadOverview(); });
+      const deleteSubscriber = (name) => guarded(async () => {
+        if (!confirm(`Delete ${name}? Their keys stop working immediately. Recorded usage is kept.`)) return;
+        await api("DELETE", `/api/subscribers/${encodeURIComponent(name)}`); selected.value = null; detail.value = null; await loadOverview();
+      });
+      const newKey = (name) => guarded(async () => {
+        const k = await api("POST", `/api/subscribers/${encodeURIComponent(name)}/keys`, { label: keyLabel.value || "generated" });
+        revealed[k.id] = true; keyLabel.value = ""; ok("Key generated. Copy it now, then hide it."); await loadOverview();
+      });
+      const revokeKey = (name, k) => guarded(async () => {
+        if (!confirm(`Revoke key "${k.label}"? Clients using it get 401 immediately.`)) return;
+        await api("DELETE", `/api/subscribers/${encodeURIComponent(name)}/keys/${k.id}`); await loadOverview();
+      });
+      const rotateKeys = (d) => guarded(async () => { // new key first, then revoke the old ones: no gap in service
+        const nk = await api("POST", `/api/subscribers/${encodeURIComponent(d.name)}/keys`, { label: "rotated" });
+        revealed[nk.id] = true;
+        for (const k of d.keys) await api("DELETE", `/api/subscribers/${encodeURIComponent(d.name)}/keys/${k.id}`);
+        ok("Rotated. Old keys revoked."); await loadOverview();
+      });
+      const copy = async (text) => { try { await navigator.clipboard.writeText(text); ok("Copied"); } catch { prompt("Copy this key:", text); } };
+      const traffic = (name, path, count) => guarded(async () => {
+        busy.value = true; trafficMsg.value = "sending…";
+        try {
+          const r = await api("POST", `/api/subscribers/${encodeURIComponent(name)}/traffic`, { path, count });
+          trafficMsg.value = `${path}: ` + Object.entries(r.statuses).map(([s, n]) => `${n}× ${s}`).join("  ");
+          setTimeout(refresh, 2500); // usage events land ~2s after the calls
+        } finally { busy.value = false; }
+      });
+
+      // ---- plans ----
+      const createPlan = () => guarded(async () => {
+        await api("POST", "/api/plans", { name: newPlanName.value, monthly_price_cents: 1900, monthly_included: 10000, overage_per_1k_cents: 100, per_minute: 20, endpoints: [] });
+        newPlanName.value = ""; ok("Plan created. Set its limits and endpoints, then save."); await reloadCatalog();
+      });
+      const savePlan = (d) => guarded(async () => {
+        await api("PUT", `/api/plans/${encodeURIComponent(d.name)}`, {
+          monthly_price_cents: Math.round((d.price || 0) * 100), monthly_included: d.included || 0, overage_per_1k_cents: Math.round((d.overage || 0) * 100),
+          per_second: blankToNull(d.per_second), per_minute: blankToNull(d.per_minute), per_hour: blankToNull(d.per_hour), per_day: blankToNull(d.per_day), endpoints: d.endpoints,
+        });
+        ok(`Saved ${d.name}; Kong reloaded.`); await reloadCatalog();
+      });
+      const deletePlan = (name) => guarded(async () => {
+        if (!confirm(`Delete plan "${name}"?`)) return;
+        await api("DELETE", `/api/plans/${encodeURIComponent(name)}`); await reloadCatalog();
+      });
+
+      // ---- upstreams / gateway ----
+      const upBody = (u) => ({ targets: targetsOf(u.targetsText), algorithm: u.algorithm, health_path: u.health_path, health_interval: u.health_interval });
+      const createUpstream = () => guarded(async () => {
+        await api("POST", "/api/upstreams", { name: newUp.name, targets: targetsOf(newUp.targetsText) });
+        Object.assign(newUp, { name: "", targetsText: "" }); ok("Backend added. Point an endpoint at it on the Endpoints tab."); await reloadCatalog(); await loadGateway();
+      });
+      const saveUpstream = (u) => guarded(async () => { await api("PUT", `/api/upstreams/${encodeURIComponent(u.name)}`, upBody(u)); ok(`Saved ${u.name}; Kong reloaded.`); await reloadCatalog(); await loadGateway(); });
+      const deleteUpstream = (name) => guarded(async () => {
+        if (!confirm(`Delete backend "${name}"?`)) return;
+        await api("DELETE", `/api/upstreams/${encodeURIComponent(name)}`); await reloadCatalog(); await loadGateway();
+      });
+      const resync = () => guarded(async () => { await api("POST", "/api/gateway/sync"); ok("Kong reloaded from the database."); await loadGateway(); });
+
+      // ---- endpoints ----
+      const createEndpoint = () => guarded(async () => {
+        await api("POST", "/api/endpoints", { ...newEp });
+        Object.assign(newEp, { name: "", path: "/api/", units: 1, description: "", upstream_path: "" }); ok("Endpoint added (locked until a plan includes it)."); await reloadCatalog();
+      });
+      const saveEndpoint = (e) => guarded(async () => {
+        await api("PUT", `/api/endpoints/${encodeURIComponent(e.name)}`, { path: e.path, units: e.units, description: e.description, upstream: e.upstream, upstream_path: e.upstream_path || "" });
+        ok(`Saved ${e.name}; Kong reloaded.`); await reloadCatalog();
+      });
+      const deleteEndpoint = (name) => guarded(async () => {
+        if (!confirm(`Delete endpoint "${name}"? It is removed from every plan and its route disappears.`)) return;
+        await api("DELETE", `/api/endpoints/${encodeURIComponent(name)}`); await reloadCatalog();
+      });
+
+      let timer;
+      onMounted(async () => { await guarded(reloadCatalog); timer = setInterval(() => { if (tab.value === "overview") refresh(); else if (tab.value === "gateway") guarded(loadGateway); }, 5000); });
+      onUnmounted(() => clearInterval(timer));
+
+      return { upstreams, upDrafts, newUp, health, gatewayYaml, endpointsOn, loadGateway, createUpstream, saveUpstream, deleteUpstream, resync, tabs, tab, month, error, notice, updated, busy, trafficMsg, rows, totals, plans, endpoints, selected, detail, revealed, newSub, keyLabel, newPlanName, newEp,
+        drafts, epDrafts, fmt, money, mask, statusClass, planOf, subscribersOn, plansWith, limitsText, isDirty, resetDraft, usedPct, routes, bars,
+        loadOverview, go, select, createSubscriber, changePlan, deleteSubscriber, newKey, revokeKey, rotateKeys, copy, traffic, createPlan, savePlan, deletePlan,
+        createEndpoint, saveEndpoint, deleteEndpoint };
+    },
+  }).mount("#app");
+}
+</script>
+</body>
+</html>

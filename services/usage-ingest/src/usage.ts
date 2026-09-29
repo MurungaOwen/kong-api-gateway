@@ -12,6 +12,7 @@ export interface UsageEvent {
   month: string; // YYYY-MM (UTC)
   status: number;
   units: number; // billing weight; 1 for http-log
+  ts: number; // epoch ms
 }
 
 export type Source = "http-log" | "billing-meter";
@@ -31,6 +32,7 @@ export function fromMeter(e: MeterEvent): UsageEvent | null {
     consumer: e.consumer,
     route: e.route ?? "unknown",
     month: new Date(e.ts ?? Date.now()).toISOString().slice(0, 7),
+    ts: e.ts ?? Date.now(),
     status: e.status ?? 200,
     units: Number.isFinite(e.units) && (e.units as number) > 0 ? (e.units as number) : 1,
   };
@@ -46,6 +48,7 @@ export function toEvent(e: KongLogEntry): UsageEvent | null {
     consumer,
     route: e.route?.name ?? "unknown",
     month: new Date(ts).toISOString().slice(0, 7),
+    ts,
     status,
     units: 1,
   };
@@ -58,26 +61,58 @@ export function normalize(body: unknown): KongLogEntry[] {
   return [];
 }
 
+/** Keeps every event in memory (fine at demo scale) and hands each new one to `persist`. */
 export class UsageStore {
-  // consumer -> month -> route -> count
-  private data = new Map<string, Map<string, Map<string, number>>>();
+  private events: UsageEvent[] = [];
 
-  record(ev: UsageEvent): void {
-    const months = this.data.get(ev.consumer) ?? new Map();
-    const routes = months.get(ev.month) ?? new Map();
-    routes.set(ev.route, (routes.get(ev.route) ?? 0) + ev.units);
-    months.set(ev.month, routes);
-    this.data.set(ev.consumer, months);
+  constructor(private persist?: (ev: UsageEvent) => void) {}
+
+  record(ev: UsageEvent, replay = false): void {
+    this.events.push(ev);
+    if (!replay) this.persist?.(ev);
+  }
+
+  private select(consumer: string, month: string): UsageEvent[] {
+    return this.events.filter((e) => e.consumer === consumer && e.month === month);
   }
 
   summary(consumer: string, month: string) {
-    const routes = this.data.get(consumer)?.get(month) ?? new Map<string, number>();
-    const by_route = Object.fromEntries(routes);
-    const total = [...routes.values()].reduce((a, b) => a + b, 0);
-    return { consumer, month, total, by_route };
+    const by_route: Record<string, number> = {};
+    let total = 0;
+    const evs = this.select(consumer, month);
+    for (const e of evs) {
+      by_route[e.route] = (by_route[e.route] ?? 0) + e.units;
+      total += e.units;
+    }
+    return { consumer, month, total, calls: evs.length, by_route };
+  }
+
+  /** Units and calls per UTC day, oldest first (only days with traffic). */
+  daily(consumer: string, month: string) {
+    const days = new Map<string, { day: string; units: number; calls: number }>();
+    for (const e of this.select(consumer, month)) {
+      const day = new Date(e.ts).toISOString().slice(0, 10);
+      const d = days.get(day) ?? { day, units: 0, calls: 0 };
+      d.units += e.units;
+      d.calls += 1;
+      days.set(day, d);
+    }
+    return [...days.values()].sort((a, b) => a.day.localeCompare(b.day));
+  }
+
+  /** Newest first. */
+  recent(consumer: string, limit = 25): UsageEvent[] {
+    return this.events
+      .filter((e) => e.consumer === consumer)
+      .slice(-limit)
+      .reverse();
+  }
+
+  overview(month: string) {
+    return this.consumers().map((c) => this.summary(c, month));
   }
 
   consumers(): string[] {
-    return [...this.data.keys()].sort();
+    return [...new Set(this.events.map((e) => e.consumer))].sort();
   }
 }
